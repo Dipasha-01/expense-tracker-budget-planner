@@ -1,17 +1,31 @@
-# expense_tracker_fresh
+# Expense Tracker & Budget Planner
 
-A new Flutter project.
+A comprehensive expense tracking and budget management application built with Flutter and Firebase. Helps users monitor income, expenses, and financial health with real-time cloud sync.
 
-## Getting Started
+---
 
-This project is a starting point for a Flutter application.
+## 📱 Features
 
-A few resources to get you started if this is your first Flutter project:
+- **Authentication** – Sign up, Login, Logout with Firebase Auth
+- **Dashboard** – Real-time view of total balance, income, and expense
+- **Add Transactions** – Unified form for income and expense with categories, amount, date, note, and payment method
+- **Income Categories** – Salary, Freelancing, Scholarship, Pocket Money, Business, Other
+- **Expense Categories** – Food, Shopping, Travel, Fuel, Recharge, Bills, Education, Entertainment, Health, EMI, Others
+- **Recent Transactions** – Quick view of latest transactions with category icons
+- **Cloud Sync** – All data stored in Firebase Firestore
+- **User Profile** – Personalized greeting with user name
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+---
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## 🛠️ Tech Stack
+
+| Technology | Purpose |
+|------------|---------|
+| Flutter (Dart) | Frontend Framework |
+| Firebase Auth | User Authentication |
+| Firebase Firestore | Cloud Database |
+| SharedPreferences | Local Session Storage |
+| intl | Date Formatting |
+| uuid | Unique ID Generation |
+
+---

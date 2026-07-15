@@ -7,7 +7,6 @@ class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // Save user data to SharedPreferences
   Future<void> _saveUserData({
     required String uid,
     required String name,
@@ -17,19 +16,14 @@ class AuthService {
     await prefs.setString('uid', uid);
     await prefs.setString('name', name);
     await prefs.setString('email', email);
+    print('Saved to SharedPreferences: uid=$uid, name=$name, email=$email');
   }
 
-  // Get user data from SharedPreferences
-  Future<Map<String, String>?> getUserDataFromPrefs() async {
+  Future<String?> getCurrentUserId() async {
     final prefs = await SharedPreferences.getInstance();
-    final uid = prefs.getString('uid');
-    final name = prefs.getString('name');
-    final email = prefs.getString('email');
-    if (uid == null || name == null || email == null) return null;
-    return {'uid': uid, 'name': name, 'email': email};
+    return prefs.getString('uid');
   }
 
-  // Clear user data on logout
   Future<void> _clearUserData() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('uid');
@@ -37,32 +31,46 @@ class AuthService {
     await prefs.remove('email');
   }
 
-  // Sign up
   Future<UserModel?> signUpWithEmail({
     required String email,
     required String password,
     required String name,
   }) async {
     try {
+      print('SignUp started: email=$email, name=$name');
+
       UserCredential result = await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
 
-      String? uid = result.user?.uid;
-      if (uid == null) return null;
+      User? firebaseUser = result.user;
+      if (firebaseUser == null) {
+        print('Firebase user is null');
+        return null;
+      }
 
-      await _firestore.collection('users').doc(uid).set({
-        'uid': uid,
+      print('User created: uid=${firebaseUser.uid}');
+
+      // Set display name
+      await firebaseUser.updateDisplayName(name);
+      await firebaseUser.reload();
+      print('Display name updated');
+
+      // ✅ SAVE TO FIRESTORE WITH ALL FIELDS
+      await _firestore.collection('users').doc(firebaseUser.uid).set({
+        'uid': firebaseUser.uid,
         'email': email,
         'name': name,
         'createdAt': DateTime.now(),
       });
+      print('Firestore document saved with name: $name');
 
-      await _saveUserData(uid: uid, name: name, email: email);
+      // Save to SharedPreferences
+      await _saveUserData(uid: firebaseUser.uid, name: name, email: email);
 
       return UserModel(
-        uid: uid,
+        uid: firebaseUser.uid,
         email: email,
         name: name,
         createdAt: DateTime.now(),
@@ -73,7 +81,6 @@ class AuthService {
     }
   }
 
-  // Login
   Future<void> loginWithEmail({
     required String email,
     required String password,
@@ -87,19 +94,20 @@ class AuthService {
       String? uid = result.user?.uid;
       if (uid == null) throw Exception('Login failed: no uid');
 
-      // Fetch user data from Firestore
       DocumentSnapshot doc = await _firestore
           .collection('users')
           .doc(uid)
           .get();
-      if (!doc.exists) throw Exception('User data not found');
+      if (!doc.exists) {
+        print('User document does not exist in Firestore');
+        throw Exception('User data not found');
+      }
 
       final data = doc.data() as Map<String, dynamic>;
-      // ✅ Use a different variable name to avoid conflict with the `email` parameter
       final userEmail = data['email'] ?? '';
       final userName = data['name'] ?? '';
+      print('Fetched from Firestore: name=$userName, email=$userEmail');
 
-      // Save to SharedPreferences
       await _saveUserData(uid: uid, name: userName, email: userEmail);
     } catch (e) {
       print('Login error: $e');
@@ -107,13 +115,11 @@ class AuthService {
     }
   }
 
-  // Logout
   Future<void> logout() async {
     await _auth.signOut();
     await _clearUserData();
   }
 
-  // Get user data from Firestore (for use elsewhere)
   Future<UserModel?> getUserData(String uid) async {
     try {
       DocumentSnapshot doc = await _firestore
@@ -121,7 +127,9 @@ class AuthService {
           .doc(uid)
           .get();
       if (doc.exists) {
-        return UserModel.fromMap(uid, doc.data() as Map<String, dynamic>);
+        final data = doc.data() as Map<String, dynamic>;
+        print('getUserData: name=${data['name']}, email=${data['email']}');
+        return UserModel.fromMap(uid, data);
       }
       return null;
     } catch (e) {

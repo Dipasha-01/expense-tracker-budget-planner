@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/chart_service.dart';
 import '../services/transaction_service.dart';
+import '../services/pdf_service.dart'; // ✅ Added import
 import '../models/transaction_model.dart';
 import '../utils/constants.dart';
 import '../utils/categories.dart';
@@ -39,6 +40,26 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
         ),
         foregroundColor: Colors.white,
         elevation: 0,
+        // ✅ Added actions with PDF export button
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.picture_as_pdf),
+            onPressed: () async {
+              final now = DateTime.now();
+              try {
+                await PdfService().generateMonthlyReport(
+                  context,
+                  now.year,
+                  now.month,
+                );
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error: ${e.toString()}')),
+                );
+              }
+            },
+          ),
+        ],
         // ✅ Reduced height from 50 to 40
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(40),

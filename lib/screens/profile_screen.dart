@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
 import '../services/transaction_service.dart';
 import '../models/transaction_model.dart';
 import '../utils/constants.dart';
+import '../providers/theme_provider.dart';
 import 'login_screen.dart';
+import 'goals_screen.dart';
+import 'pin_screen.dart';
+import '../services/pin_service.dart';
+import '../services/backup_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -17,13 +23,17 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final AuthService _auth = AuthService();
   final TransactionService _transactionService = TransactionService();
+  final PinService _pinService = PinService();
+  final BackupService _backupService = BackupService();
 
   late Future<Map<String, dynamic>> _userDataFuture;
+  Future<bool> _pinEnabledFuture = Future.value(false);
 
   @override
   void initState() {
     super.initState();
     _userDataFuture = _getUserData();
+    _pinEnabledFuture = _pinService.isPinEnabled();
   }
 
   Future<Map<String, dynamic>> _getUserData() async {
@@ -32,7 +42,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final name = user?.displayName ?? prefs.getString('name') ?? 'User';
     final email = user?.email ?? prefs.getString('email') ?? 'No email';
 
-    // Get transaction stats
     final transactions = await _transactionService.getTransactions().first;
     double income = 0;
     double expense = 0;
@@ -65,6 +74,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    final isDark = themeProvider.themeMode == ThemeMode.dark;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -100,192 +112,198 @@ class _ProfileScreenState extends State<ProfileScreen> {
           final expense = data['expense'] ?? 0.0;
           final count = data['count'] ?? 0;
 
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(AppSpacing.md),
-            child: Column(
-              children: [
-                // ---------- Profile Header ----------
-                Container(
-                  padding: const EdgeInsets.all(AppSpacing.lg),
-                  decoration: AppDecorations.glassCard(),
-                  child: Column(
-                    children: [
-                      // Avatar
-                      Container(
-                        width: 80,
-                        height: 80,
-                        decoration: BoxDecoration(
-                          gradient: AppGradients.primary,
-                          shape: BoxShape.circle,
-                          boxShadow: AppShadows.soft,
-                        ),
-                        child: Center(
-                          child: Text(
-                            name.isNotEmpty ? name[0].toUpperCase() : 'U',
-                            style: const TextStyle(
-                              fontSize: 32,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
+          return FutureBuilder<bool>(
+            future: _pinEnabledFuture,
+            builder: (context, pinSnapshot) {
+              final pinEnabled = pinSnapshot.data ?? false;
+              return SingleChildScrollView(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                child: Column(
+                  children: [
+                    // Profile Header
+                    Container(
+                      padding: const EdgeInsets.all(AppSpacing.lg),
+                      decoration: AppDecorations.glassCard(),
+                      child: Column(
+                        children: [
+                          Container(
+                            width: 80,
+                            height: 80,
+                            decoration: BoxDecoration(
+                              gradient: AppGradients.primary,
+                              shape: BoxShape.circle,
+                              boxShadow: AppShadows.soft,
+                            ),
+                            child: Center(
+                              child: Text(
+                                name.isNotEmpty ? name[0].toUpperCase() : 'U',
+                                style: const TextStyle(
+                                  fontSize: 32,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
                             ),
                           ),
+                          const SizedBox(height: AppSpacing.md),
+                          Text(name, style: AppTextStyles.heading3),
+                          const SizedBox(height: 4),
+                          Text(email, style: AppTextStyles.bodyMedium),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+
+                    // Stats Cards
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildStatCard(
+                            'Total Income',
+                            '₹${income.toStringAsFixed(2)}',
+                            AppColors.income,
+                            Icons.arrow_upward,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: AppSpacing.md),
-                      Text(name, style: AppTextStyles.heading3),
-                      const SizedBox(height: 4),
-                      Text(email, style: AppTextStyles.bodyMedium),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.lg),
-
-                // ---------- Stats Cards ----------
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildStatCard(
-                        'Total Income',
-                        '₹${income.toStringAsFixed(2)}',
-                        AppColors.income,
-                        Icons.arrow_upward,
-                      ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: _buildStatCard(
+                            'Total Expense',
+                            '₹${expense.toStringAsFixed(2)}',
+                            AppColors.expense,
+                            Icons.arrow_downward,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: _buildStatCard(
-                        'Total Expense',
-                        '₹${expense.toStringAsFixed(2)}',
-                        AppColors.expense,
-                        Icons.arrow_downward,
+                    const SizedBox(height: AppSpacing.sm),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildStatCard(
+                            'Transactions',
+                            count.toString(),
+                            AppColors.primary,
+                            Icons.receipt_long,
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: _buildStatCard(
+                            'Savings',
+                            '₹${(income - expense).toStringAsFixed(2)}',
+                            (income - expense) >= 0
+                                ? AppColors.accent
+                                : AppColors.expense,
+                            Icons.savings,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+
+                    // ---------- Settings Menu ----------
+                    // 1. Theme Toggle
+                    _buildMenuItem(
+                      icon: isDark ? Icons.dark_mode : Icons.light_mode,
+                      label: isDark ? 'Dark Mode' : 'Light Mode',
+                      trailing: Switch(
+                        value: isDark,
+                        onChanged: (_) => themeProvider.toggleTheme(),
+                        activeColor: AppColors.primary,
+                      ),
+                      onTap: () => themeProvider.toggleTheme(),
+                    ),
+                    // 2. PIN Lock
+                    _buildMenuItem(
+                      icon: Icons.lock_outline,
+                      label: pinEnabled ? 'Disable PIN' : 'Enable PIN',
+                      trailing: const Icon(
+                        Icons.chevron_right,
+                        color: AppColors.textTertiary,
+                      ),
+                      onTap: () async {
+                        if (pinEnabled) {
+                          // Disable PIN
+                          await _pinService.disablePin();
+                          setState(() {
+                            _pinEnabledFuture = Future.value(false);
+                          });
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('PIN disabled')),
+                          );
+                        } else {
+                          // Navigate to PIN setup
+                          final result = await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  const PinScreen(mode: PinMode.setup),
+                            ),
+                          );
+                          if (result == true) {
+                            setState(() {
+                              _pinEnabledFuture = Future.value(true);
+                            });
+                          }
+                        }
+                      },
+                    ),
+                    // 3. Backup & Sync
+                    _buildMenuItem(
+                      icon: Icons.backup,
+                      label: 'Backup & Sync',
+                      trailing: const Icon(
+                        Icons.chevron_right,
+                        color: AppColors.textTertiary,
+                      ),
+                      onTap: () => _showBackupDialog(context),
+                    ),
+                    // 4. Savings Goals (already in menu, but keep it)
+                    _buildMenuItem(
+                      icon: Icons.emoji_events,
+                      label: 'Savings Goals',
+                      trailing: const Icon(
+                        Icons.chevron_right,
+                        color: AppColors.textTertiary,
+                      ),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const GoalsScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                    const Divider(
+                      color: AppColors.border,
+                      height: AppSpacing.lg,
+                    ),
+
+                    // Logout
+                    _buildMenuItem(
+                      icon: Icons.logout,
+                      label: 'Logout',
+                      color: AppColors.expense,
+                      trailing: const Icon(
+                        Icons.chevron_right,
+                        color: AppColors.textTertiary,
+                      ),
+                      onTap: _logout,
+                    ),
+
+                    const SizedBox(height: AppSpacing.md),
+                    Text(
+                      'ExpenseX v1.0.0',
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.textTertiary,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: AppSpacing.sm),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildStatCard(
-                        'Transactions',
-                        count.toString(),
-                        AppColors.primary,
-                        Icons.receipt_long,
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: _buildStatCard(
-                        'Savings',
-                        '₹${(income - expense).toStringAsFixed(2)}',
-                        (income - expense) >= 0
-                            ? AppColors.accent
-                            : AppColors.expense,
-                        Icons.savings,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.lg),
-
-                // ---------- Settings Menu ----------
-                _buildMenuItem(
-                  icon: Icons.dark_mode,
-                  label: 'Dark Mode',
-                  trailing: const Icon(
-                    Icons.toggle_on,
-                    color: AppColors.primary,
-                  ),
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Theme settings coming soon!'),
-                      ),
-                    );
-                  },
-                ),
-                _buildMenuItem(
-                  icon: Icons.currency_rupee,
-                  label: 'Currency',
-                  trailing: const Text(
-                    '₹ INR',
-                    style: TextStyle(color: AppColors.textSecondary),
-                  ),
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Currency settings coming soon!'),
-                      ),
-                    );
-                  },
-                ),
-                _buildMenuItem(
-                  icon: Icons.language,
-                  label: 'Language',
-                  trailing: const Text(
-                    'English',
-                    style: TextStyle(color: AppColors.textSecondary),
-                  ),
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Language settings coming soon!'),
-                      ),
-                    );
-                  },
-                ),
-                _buildMenuItem(
-                  icon: Icons.security,
-                  label: 'Security',
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                    color: AppColors.textTertiary,
-                  ),
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Security settings coming soon!'),
-                      ),
-                    );
-                  },
-                ),
-                _buildMenuItem(
-                  icon: Icons.backup,
-                  label: 'Backup & Sync',
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                    color: AppColors.textTertiary,
-                  ),
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Backup settings coming soon!'),
-                      ),
-                    );
-                  },
-                ),
-                const Divider(color: AppColors.border, height: AppSpacing.lg),
-
-                // ---------- Logout ----------
-                _buildMenuItem(
-                  icon: Icons.logout,
-                  label: 'Logout',
-                  color: AppColors.expense,
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                    color: AppColors.textTertiary,
-                  ),
-                  onTap: _logout,
-                ),
-
-                const SizedBox(height: AppSpacing.md),
-                Text(
-                  'ExpenseX v1.0.0',
-                  style: AppTextStyles.caption.copyWith(
-                    color: AppColors.textTertiary,
-                  ),
-                ),
-              ],
-            ),
+              );
+            },
           );
         },
       ),
@@ -363,6 +381,63 @@ class _ProfileScreenState extends State<ProfileScreen> {
             if (trailing != null) trailing,
           ],
         ),
+      ),
+    );
+  }
+
+  void _showBackupDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).brightness == Brightness.dark
+            ? AppColors.card
+            : Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.large),
+        ),
+        title: const Text('Backup & Sync'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.download, color: AppColors.primary),
+              title: const Text('Export Data'),
+              subtitle: const Text('Save all your data as JSON'),
+              onTap: () async {
+                Navigator.pop(context);
+                await _backupService.exportData(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.upload, color: AppColors.primary),
+              title: const Text('Import Data'),
+              subtitle: const Text('Restore from a JSON file'),
+              onTap: () async {
+                Navigator.pop(context);
+                await _backupService.importData(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.sync, color: AppColors.primary),
+              title: const Text('Force Sync'),
+              subtitle: const Text('Sync with cloud (manual)'),
+              onTap: () {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Sync triggered (data is already real-time)'),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
       ),
     );
   }
